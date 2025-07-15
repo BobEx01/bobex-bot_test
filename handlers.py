@@ -4,7 +4,7 @@ from telegram.ext import CallbackContext, CommandHandler, MessageHandler, filter
 from database import Database
 from config import ADMIN_ID, CARD_NUMBER, CARD_OWNER
 
-db = DB()
+db = Database()
 
 def start(update: Update, context: CallbackContext):
     user = update.effective_user
