@@ -1,22 +1,19 @@
 import sqlite3
 
-class Dadabase:
-    def __init__(self, db_name='bobex.db'):
-        self.conn = sqlite3.connect(db_name, check_same_thread=False)
+class Database:
+    def __init__(self, db_path='bobex.db'):
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.create_tables()
 
     def create_tables(self):
-        # Foydalanuvchilar jadvali
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER UNIQUE,
-                is_premium INTEGER DEFAULT 0
+                user_id INTEGER PRIMARY KEY,
+                is_premium INTEGER DEFAULT 0,
+                balance INTEGER DEFAULT 0
             )
         ''')
-
-        # E'lonlar jadvali
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS ads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,46 +26,35 @@ class Dadabase:
         ''')
         self.conn.commit()
 
-    # Foydalanuvchini qo'shish
     def add_user(self, user_id):
-        self.cursor.execute('''
-            INSERT OR IGNORE INTO users (user_id) VALUES (?)
-        ''', (user_id,))
+        self.cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
         self.conn.commit()
 
-    # Foydalanuvchini premium qilish
-    def set_premium(self, user_id):
-        self.cursor.execute('''
-            UPDATE users SET is_premium = 1 WHERE user_id = ?
-        ''', (user_id,))
+    def set_premium(self, user_id, value=1):
+        self.cursor.execute('UPDATE users SET is_premium = ? WHERE user_id = ?', (value, user_id))
         self.conn.commit()
 
-    # Premium foydalanuvchimi tekshirish
-    def is_premium(self, user_id):
-        self.cursor.execute('''
-            SELECT is_premium FROM users WHERE user_id = ?
-        ''', (user_id,))
-        result = self.cursor.fetchone()
-        return result[0] == 1 if result else False
+    def get_user(self, user_id):
+        self.cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        return self.cursor.fetchone()
 
-    # E'lon qo'shish
+    def add_balance(self, user_id, amount):
+        self.cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
+        self.conn.commit()
+
     def add_ad(self, user_id, cargo_desc, vazn, tolov, is_premium=0):
         self.cursor.execute('''
-            INSERT INTO ads (user_id, cargo_desc, vazn, tolov, is_premium) 
+            INSERT INTO ads (user_id, cargo_desc, vazn, tolov, is_premium)
             VALUES (?, ?, ?, ?, ?)
         ''', (user_id, cargo_desc, vazn, tolov, is_premium))
         self.conn.commit()
 
-    # Barcha e'lonlarni olish
-    def get_all_ads(self):
-        self.cursor.execute('''
-            SELECT * FROM ads
-        ''')
+    def get_ads(self, is_premium=None):
+        if is_premium is None:
+            self.cursor.execute('SELECT * FROM ads')
+        else:
+            self.cursor.execute('SELECT * FROM ads WHERE is_premium = ?', (is_premium,))
         return self.cursor.fetchall()
 
-    # Foydalanuvchining e'lonlarini olish
-    def get_user_ads(self, user_id):
-        self.cursor.execute('''
-            SELECT * FROM ads WHERE user_id = ?
-        ''', (user_id,))
-        return self.cursor.fetchall()
+    def close(self):
+        self.conn.close()
