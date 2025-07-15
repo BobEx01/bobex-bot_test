@@ -1,309 +1,200 @@
+SCALPING DOMINION, [16.07.2025 1:40]
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
-from database import Database
-from utils import is_admin, send_formatted_message
+from database import JB  # Sizning DB interfeysingiz (o'zgaruvchiga moslang)
+from config import ADMIN_IDS  # admin id lar ro'yxati
 
-db = Database()
-
-# --- 1. /start komandasi ---
+# /start komandasi
 def start(update: Update, context: CallbackContext):
-    user = update.effective_user
-    user_id = user.id
-    
-    # Foydalanuvchini bazaga qo'shish yoki tekshirish
-    if not db.get_user(user_id):
-        db.add_user(user_id, user.full_name, user.username)
-        
-        # BONUS: yangi foydalanuvchiga 50,000 som bonus qo'shish
-        db.update_balance(user_id, 50000)
-        send_formatted_message(update, "Xush kelibsiz", [("🎁 Bonus", "Sizga 50,000 som bonus berildi!")])
-    
-    keyboard = [
-        [InlineKeyboardButton("🧾 Profilim", callback_data="show_profile")],
-        [InlineKeyboardButton("💳 To'lovlar tarixi", callback_data="payment_history_0")],
-        [InlineKeyboardButton("📢 Elon berish", callback_data="post_ad")],
-        [InlineKeyboardButton("⚙️ Sozlamalar", callback_data="settings")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    update.message.reply_text(
-        f"Assalomu alaykum, {user.first_name}!\n"
-        "Bobex Birja botiga xush kelibsiz!",
-        reply_markup=reply_markup
-    )
-
-
-# --- 2. Profil ko'rsatish ---
-def show_profile(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user_id = query.from_user.id
-    
-    user_data = db.get_user(user_id)
-    if not user_data:
-        query.answer("Foydalanuvchi topilmadi!", show_alert=True)
-        return
-    
-    # To'lov statistikasi
-    stats = db.get_payment_stats(user_id)
-    
-    items = [
-        ("👤 Ism", user_data['full_name']),
-        ("🆔 ID", str(user_data['user_id'])),
-        ("💰 Balans", f"{user_data['balance']} so'm"),
-        ("💳 To'lovlar soni", str(stats['total_count'])),
-        ("✅ Tasdiqlangan to'lovlar", str(stats['confirmed_count'])),
-        ("❌ Rad etilgan to'lovlar", str(stats['rejected_count'])),
-    ]
-    
-    send_formatted_message(update, "Profil ma'lumotlari", items)
-    query.answer()
-
-
-# --- 3. To'lovlar tarixini sahifalash ---
-def payment_history(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user_id = query.from_user.id
-    
-    # Sahifa raqamini olish (callback_data: payment_history_{page})
-    data = query.data
-    page = 0
-    try:
-        page = int(data.split('_')[-1])
-    except Exception:
-        page = 0
-    
-    limit = 10
-    offset = page * limit
-    
-    payments = db.get_payments(user_id, limit=limit, offset=offset)
-    total = db.count_payments(user_id)
-    
-    if not payments and page > 0:
-        # Sahifa bo'sh bo'lsa oldingi sahifani ko'rsatish
-        page = 0
-        payments = db.get_payments(user_id, limit=limit, offset=0)
-    
-    status_icons = {'pending': '⏳', 'confirmed': '✅', 'rejected': '❌'}
-    payment_lines = []
-    for p in payments:
-        icon = status_icons.get(p['status'], '')
-        payment_lines.append(f"{icon} {p['date']} - {p['amount']} so'm - {p['status']}")
-    
-    text = f"💳 To'lovlar tarixi (sahifa {page+1}):\n\n" + "\n".join(payment_lines) if payment_lines else "To‘lovlar topilmadi."
-    
-    # Tugmalar
-    buttons = []
-    if page > 0:
-        buttons.append(InlineKeyboardButton("⬅️ Avvalgi", callback_data=f"payment_history_{page-1}"))
-    if (page + 1)*limit < total:
-        buttons.append(InlineKeyboardButton("Keyingi ➡️", callback_data=f"payment_history_{page+1}"))
-    
-    reply_markup = InlineKeyboardMarkup([buttons]) if buttons else None
-    
-    query.edit_message_text(text, reply_markup=reply_markup)
-    query.answer()
-    # --- 4. Admin panelini ko'rsatish ---
-def admin_panel(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        update.message.reply_text("⚠️ Bu buyruq faqat adminlar uchun!")
-        return
-    
-    keyboard = [
-    [InlineKeyboardButton("👥 Foydalanuvchilar soni", callback_data="admin_stats_users")],
-        [InlineKeyboardButton("💳 To'lovlar statistikasi", callback_data="admin_stats_payments")],
-        [InlineKeyboardButton("🎁 Bonuslar statistikasi", callback_data="admin_stats_bonuses")],
-        [InlineKeyboardButton("📊 Umumiy statistika", callback_data="admin_stats_general")],
-        [InlineKeyboardButton("➕ Bonus berish", callback_data="admin_add_bonus")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    update.message.reply_text("🛠 *Admin paneli* - Bo‘limlardan birini tanlang:", reply_markup=reply_markup, parse_mode="Markdown")
+    username = update.effective_user.username
 
-
-# --- 5. Admin paneldagi tugmalarni boshqarish ---
-def handle_admin_callbacks(update: Update, context: CallbackContext):
-    query = update.callback_query
-    user_id = query.from_user.id
-    data = query.data
-    
-    if not is_admin(user_id):
-        query.answer("Sizda admin huquqlari yo‘q!", show_alert=True)
-        return
-    
-    if data == "admin_stats_users":
-        total_users = db.count_users()
-        active_users = db.count_active_users()
-        inactive = total_users - active_users
-        
-        text = (
-            f"👥 *Foydalanuvchilar statistikasi*\n\n"
-            f"🔢 Jami: {total_users}\n"
-            f"🟢 Faol: {active_users}\n"
-            f"🔴 Nofaol: {inactive}"
-        )
-    
-    elif data == "admin_stats_payments":
-        total_count, total_sum = db.get_total_payments()
-        confirmed_count, confirmed_sum = db.get_confirmed_payments()
-        pending_count, pending_sum = db.get_pending_payments()
-        
-        text = (
-            f"💳 *To‘lovlar statistikasi*\n\n"
-            f"🔢 Jami: {total_count} ta ({total_sum} so'm)\n"
-            f"✅ Tasdiqlangan: {confirmed_count} ta ({confirmed_sum} so'm)\n"
-            f"⏳ Kutilayotgan: {pending_count} ta ({pending_sum} so'm)"
-        )
-    
-    elif data == "admin_stats_bonuses":
-        referral_count, referral_sum = db.get_referral_bonuses()
-        total_balance = db.get_total_balance()
-        
-        text = (
-            f"🎁 *Bonuslar statistikasi*\n\n"
-            f"👥 Referral bonuslar: {referral_count} ta ({referral_sum} so'm)\n"
-            f"💰 Umumiy balanslar: {total_balance} so'm"
-        )
-    
-    elif data == "admin_stats_general":
-        users = db.count_users()
-        payments = db.count_payments_all()
-        total_payments = db.get_confirmed_payments_sum()
-        referrals = db.count_referrals()
-        
-        text = (
-            f"📊 *Umumiy statistika*\n\n"
-            f"👥 Foydalanuvchilar: {users}\n"
-            f"💳 To‘lovlar: {payments} ta\n"
-            f"💰 Jami to‘lovlar: {total_payments} so'm\n"
-            f"🎁 Referrallar: {referrals}"
-        )
-    
-    elif data == "admin_add_bonus":
-        text = (
-            "➕ *Bonus berish*\n\n"
-            "Bonus berish uchun quyidagi formatda yozing:\n"
-            "/addbonus <user_id> <miqdor yoki %> <sabab (ixtiyoriy)>\n\n"
-            "Masalan:\n"
-            "/addbonus 12345678 10% Referral bonus\n"
-            "/addbonus 12345678 50 Admin mukofoti"
+    # Foydalanuvchini bazaga qo'shish yoki tekshirish
+    if not JB.user_exists(user_id):
+        JB.add_user(user_id, username)
+        # Yangi foydalanuvchiga 50,000 bonus berish
+        JB.add_balance(user_id, 50000)
+        update.message.reply_text(
+            f"Assalomu alaykum, {username}! Siz ro'yxatdan o'tdingiz va 50,000 so'm bonus oldingiz."
         )
     else:
-        text = "⚠️ Noma'lum buyruq."
-    
-    query.edit_message_text(text, parse_mode="Markdown")
+        update.message.reply_text(f"Assalomu alaykum, {username}! Botga xush kelibsiz.")
+
+    # Asosiy menyuni ko'rsatish
+    main_menu(update, context)
+
+def main_menu(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("Elon berish", callback_data='post_ad')],
+        [InlineKeyboardButton("Shafyorlar", callback_data='shafyor_list')],
+        [InlineKeyboardButton("Hisobim", callback_data='balance')],
+        [InlineKeyboardButton("To'lovlar tarixi", callback_data='payment_history')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text("Menyu:", reply_markup=reply_markup)
+
+# CallbackQuery asosida menu funksiyalarini boshqarish
+def callback_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    user_id = query.from_user.id
+    data = query.data
+
     query.answer()
 
+    if data == 'post_ad':
+        # Bosh sahifa - viloyatni tanlash
+        send_region_selection(query)
+    elif data == 'shafyor_list':
+        send_shafyorlar_list(query)
+    elif data == 'balance':
+        balance = JB.get_balance(user_id)
+        query.edit_message_text(f"Sizning hisobingizda: {balance} so'm.")
+    elif data == 'payment_history':
+        payments = JB.get_payments(user_id)
+        if payments:
+            text = "To'lovlar tarixi:\n"
+            for p in payments:
+                text += f"ID: {p['id']} | Miqdor: {p['amount']} so'm | Holat: {p['status']}\n"
+            query.edit_message_text(text)
+        else:
+            query.edit_message_text("Sizda to‘lov tarixi yo‘q.")
+    else:
+        query.edit_message_text("Notanish buyruq.")
 
-# --- 6. To'lov tasdiqlash uchun admin komandasi ---
+# Viloyatlarni tanlash tugmasini yuborish
+def send_region_selection(query):
+    regions = JB.get_regions()  # DB dan viloyatlar ro'yxati (misol)
+    keyboard = []
+    for r in regions:
+        keyboard.append([InlineKeyboardButton(r['name'], callback_data=f"region_{r['id']}")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text("Viloyatni tanlang:", reply_markup=reply_markup)
+
+# Viloyat bo‘yicha tumanlar ro‘yxatini yuborish
+def region_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    data = query.data
+
+    if data.startswith("region_"):
+        region_id = int(data.split('_')[1])
+        districts = JB.get_districts(region_id)
+        keyboard = []
+        for d in districts:
+            keyboard.append([InlineKeyboardButton(d['name'], callback_data=f"district_{d['id']}")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        query.edit_message_text("Tumanni tanlang:", reply_markup=reply_markup)
+
+# Tuman bo‘yicha e’lonlar ro‘yxatini ko‘rsatish
+def district_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    data = query.data
+
+    if data.startswith("district_"):
+        district_id = int(data.split('_')[1])
+        ads = JB.get_ads_by_district(district_id)
+        if not ads:
+            query.edit_message_text("Bu tumanda e’lonlar yo‘q.")
+            return
+        text = f"Tumandagi e’lonlar soni: {len(ads)}\n\n"
+        for ad in ads:
+            # premium bo'lsa yuqoriga chiqarish
+            prefix = "⭐ PREMIUM ⭐\n" if ad['is_premium'] else ""
+
+SCALPING DOMINION, [16.07.2025 1:40]
+text += f"{prefix}Yuk: {ad['cargo_desc']}\nOg'irligi: {ad['weight']} kg\nTo'lov: {ad['payment']} so'm\n\n"
+        query.edit_message_text(text)
+
+# Shafyorlar ro'yxatini yuborish
+def send_shafyorlar_list(query):
+    shafyors = JB.get_shafyors()
+    if not shafyors:
+        query.edit_message_text("Hozirda shafyorlar mavjud emas.")
+        return
+    text = "Shafyorlar ro'yxati:\n"
+    for sh in shafyors:
+        text += f"{sh['name']} - To'lov: {sh['payment']} so'm\n"
+    query.edit_message_text(text)
+
+# Admin uchun to‘lovni tasdiqlash (qo‘l bilan)
 def approve_payment(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        update.message.reply_text("⚠️ Bu buyruq faqat adminlar uchun!")
+    if user_id not in ADMIN_IDS:
+        update.message.reply_text("Sizda buni bajarish huquqi yo‘q.")
         return
-    
-    args = context.args
-    if len(args) < 2:
-        update.message.reply_text("⚠️ To'g'ri format: /approvepayment <payment_id> <tasdiqlash/reject>")
+
+    try:
+        payment_id = int(context.args[0])
+    except (IndexError, ValueError):
+        update.message.reply_text("To‘lov ID sini to‘g‘ri kiriting. Masalan: /approve_payment 123")
         return
-    
-    payment_id = args[0]
-    action = args[1].lower()
-    
-    if action not in ['approve', 'reject']:
-        update.message.reply_text("⚠️ Tasdiqlash uchun 'approve' yoki 'reject' so'zlarini yozing.")
-        return
-    
-    payment = db.get_payment(payment_id)
-    if not payment:
-        update.message.reply_text("❌ To'lov topilmadi!")
-        return
-       def approve_payment(update: Update, context: CallbackContext):
+
+    # To‘lov holatini yangilash
+    JB.update_payment_status(payment_id, 'tasdiqlangan')
+    update.message.reply_text(f"To‘lov ID {payment_id} tasdiqlandi.")
+
+# To‘lovni rad etish (admin)
+def reject_payment(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    if not is_admin(user_id):
-        update.message.reply_text("⚠️ Bu buyruq faqat adminlar uchun!")
+    if user_id not in ADMIN_IDS:
+        update.message.reply_text("Sizda buni bajarish huquqi yo‘q.")
         return
 
-    args = context.args
-    if len(args) < 2:
-        update.message.reply_text("⚠️ To'g'ri format: /approvepayment <payment_id> <approve/reject>")
+    try:
+        payment_id = int(context.args[0])
+    except (IndexError, ValueError):
+        update.message.reply_text("To‘lov ID sini to‘g‘ri kiriting. Masalan: /reject_payment 123")
         return
 
-    payment_id = args[0]
-    action = args[1].lower()
+    JB.update_payment_status(payment_id, 'rad etilgan')
+    update.message.reply_text(f"To‘lov ID {payment_id} rad etildi.")
 
-    if action not in ['approve', 'reject']:
-        update.message.reply_text("⚠️ Tasdiqlash uchun 'approve' yoki 'reject' so'zlarini yozing.")
-        return
+# To‘lov qildim tugmasi bosilganda
+def payment_made_handler(update: Update, context: CallbackContext):
+    update.message.reply_text(
+        "To'lovni amalga oshiring, keyin chek (rasm) yuboring va summani kiriting."
+    )
+    # Keyingi bosqichlar uchun kontekstga to'lov jarayoni yozilishi mumkin
 
-    payment = db.get_payment(payment_id)
-    if not payment:
-        update.message.reply_text("❌ To'lov topilmadi!")
+# Profilni ko‘rish
+def profile_handler(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    profile = JB.get_user_profile(user_id)
+    if not profile:
+        update.message.reply_text("Profil topilmadi.")
         return
+    text = f"Profil ma'lumotlari:\nFoydalanuvchi: @{profile['username']}\nHisob: {profile['balance']} so'm"
+    update.message.reply_text(text)
 
-    if action == 'approve':
-        db.update_payment_status(payment_id, 'confirmed')
-        db.update_balance(payment['user_id'], payment['amount'])
-        update.message.reply_text(f"✅ To'lov {payment_id} tasdiqlandi va foydalanuvchi balansiga qo'shildi.")
-    else:
-        db.update_payment_status(payment_id, 'rejected')
-        update.message.reply_text(f"❌ To'lov {payment_id} rad etildi.")
-# --- 7. Payment pagination callback ---
-def handle_payment_pagination(update: Update, context: CallbackContext):
-    query = update.callback_query
-    data = query.data
-    
-    if data.startswith("payment_history_"):
-        payment_history(update, context)
-    else:
-        query.answer()
+# Hisob balansini ko‘rsatish
+def balance_handler(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    balance = JB.get_balance(user_id)
+    update.message.reply_text(f"Sizning hisobingizda: {balance} so'm")
 
+# To‘lov tarixini ko‘rsatish
+def payment_history_handler(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    payments = JB.get_payments(user_id)
+    if not payments:
+        update.message.reply_text("To‘lov tarixi mavjud emas.")
+        return
+    text = "To‘lovlar tarixi:\n"
+    for p in payments:
+        text += f"ID: {p['id']} | Miqdor: {p['amount']} so'm | Holat: {p['status']}\n"
+    update.message.reply_text(text)
 
-# --- 8. Sahifalash va boshqa callback larni umumiy handleri ---
-def callback_query_handler(update: Update, context: CallbackContext):
-    query = update.callback_query
-    data = query.data
-    
-    # Admin panel callbacks
-    if data.startswith("admin_"):
-        handle_admin_callbacks(update, context)
-        return
-    
-    # To'lovlar tarixi sahifalari
-    if data.startswith("payment_history_"):
-        payment_history(update, context)
-        return
-    
-    # Profil ko'rsatish
-    if data == "show_profile":
-        show_profile(update, context)
-        return
-    
-    # Elon berish bo'limi
-    if data == "post_ad":
-        # Bu yerda elon berish boshlanishi kerak, keyingi qadamlar yozilishi kerak
-        query.answer("Elon berish funksiyasi hozircha tayyor emas.")
-        return
-    
-    # Sozlamalar
-    if data == "settings":
-        query.answer("Sozlamalar bo‘limi hozircha tayyor emas.")
-        return
-    
-    query.answer("Noma'lum tugma bosildi.")
-
-
-# --- 9. Botga handlerlarni qo'shish funksiyasi ---
+# Handlerlarni ro'yxatga olish funksiyasi
 def setup_handlers(dispatcher):
-    # /start komandasi
     dispatcher.add_handler(CommandHandler("start", start))
-    
-    # /adminpanel komandasi
-    dispatcher.add_handler(CommandHandler("adminpanel", admin_panel))
-    
-    # /approvepayment komandasi
-    dispatcher.add_handler(CommandHandler("approvepayment", approve_payment))
-    
-    # CallbackQuery umumiy handleri
-    dispatcher.add_handler(
+    dispatcher.add_handler(CommandHandler("approve_payment", approve_payment))
+    dispatcher.add_handler(CommandHandler("reject_payment", reject_payment))
+    dispatcher.add_handler(CommandHandler("profile", profile_handler))
+    dispatcher.add_handler(CommandHandler("balance", balance_handler))
+    dispatcher.add_handler(CommandHandler("payment_history", payment_history_handler))
+
+    dispatcher.add_handler(CallbackQueryHandler(callback_handler, pattern='^(post_ad|shafyor_list|balance|payment_history)$'))
+    dispatcher.add_handler(CallbackQueryHandler(region_callback, pattern=r"^region_\d+$"))
+    dispatcher.add_handler(CallbackQueryHandler(district_callback, pattern=r"^district_\d+$"))
+
+    # Qo'shimcha xabarlar uchun handlerlar qo'shing, masalan, rasm, to'lov chekini qabul qilish va boshqalar
