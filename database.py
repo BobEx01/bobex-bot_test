@@ -1,28 +1,32 @@
 import sqlite3
 
-class DB:
+class Database:
     def __init__(self, db_name='bobex.db'):
-        self.connection = sqlite3.connect(db_name, check_same_thread=False)
-        self.cursor = self.connection.cursor()
+        self.conn = sqlite3.connect(db_name, check_same_thread=False)
+        self.cursor = self.conn.cursor()
         self.create_tables()
 
     def create_tables(self):
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER UNIQUE,
                 username TEXT,
                 first_name TEXT,
                 last_name TEXT
             )
         ''')
-        self.connection.commit()
+        self.conn.commit()
 
     def add_user(self, user_id, username, first_name, last_name):
-        self.cursor.execute('''
-            INSERT OR IGNORE INTO users (user_id, username, first_name, last_name)
-            VALUES (?, ?, ?, ?)
-        ''', (user_id, username, first_name, last_name))
-        self.connection.commit()
+        try:
+            self.cursor.execute('''
+                INSERT INTO users (user_id, username, first_name, last_name)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, username, first_name, last_name))
+            self.conn.commit()
+        except sqlite3.IntegrityError:
+            pass
 
     def get_users(self):
         self.cursor.execute('SELECT * FROM users')
