@@ -1,7 +1,7 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import CallbackContext, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
-from database import DB
+from database import Database
 from config import ADMIN_ID, CARD_NUMBER, CARD_OWNER
 
 db = DB()
