@@ -1,4 +1,3 @@
-SCALPING DOMINION, [16.07.2025 1:40]
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 
