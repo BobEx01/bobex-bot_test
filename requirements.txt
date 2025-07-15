@@ -1,3 +1,2 @@
 python-telegram-bot==13.7
-requests==2.31.0
-SQLAlchemy==1.4.49
+urllib3>=1.26.0
