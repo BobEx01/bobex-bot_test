@@ -1,21 +1,19 @@
-
-from config import ADMIN_IDS, BOT_TOKEN
-from database import Database
+from telegram import Update
+from telegram.ext import ApplicationBuilder
+from config import TOKEN
 from handlers import setup_handlers
-from telegram.ext import Updater
+from database import Database
 
-def main():
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
+db = Database()
 
-    setup_handlers(dp)
+async def start_bot():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    updater.start_polling()
-    updater.idle()
+    setup_handlers(app)
 
-if __name__ == '__main__':
-    main()
-from config import BOT_TOKEN, CARD_NUMBER, CARD_OWNER
+    print("Bobex bot ishga tushdi...")
+    await app.run_polling()
 
-print(f"Karta raqami: {CARD_NUMBER}")
-print(f"Karta egasi: {CARD_OWNER}")
+if name == '__main__':
+    import asyncio
+    asyncio.run(start_bot())
