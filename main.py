@@ -11,5 +11,5 @@ async def start_bot():
     print("Bobex bot ishga tushdi...")
     await app.run_polling()
 
-if name == '__main__':
+if __name__ == '__main__':
     asyncio.run(start_bot())
