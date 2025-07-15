@@ -98,10 +98,7 @@ def district_callback(update: Update, context: CallbackContext):
         text = f"Tumandagi e’lonlar soni: {len(ads)}\n\n"
         for ad in ads:
             # premium bo'lsa yuqoriga chiqarish
-            prefix = "⭐ PREMIUM ⭐\n" if ad['is_premium'] else ""
-
-SCALPING DOMINION, [16.07.2025 1:40]
-text += f"{prefix}Yuk: {ad['cargo_desc']}\nOg'irligi: {ad['weight']} kg\nTo'lov: {ad['payment']} so'm\n\n"
+            prefix = "⭐️ PREMIUM ⭐️\n" if ad['is_premium'] else ""text += f"{prefix}Yuk: {ad['cargo_desc']}\nOg'irligi: {ad['weight']} kg\nTo'lov: {ad['payment']} so'm\n\n"
         query.edit_message_text(text)
 
 # Shafyorlar ro'yxatini yuborish
