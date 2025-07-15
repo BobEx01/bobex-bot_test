@@ -1,19 +1,15 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder
+from telegram.ext import Application
 from config import TOKEN
 from handlers import setup_handlers
-from database import Database
-
-db = Database()
+import asyncio
 
 async def start_bot():
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).build()
 
     setup_handlers(app)
 
     print("Bobex bot ishga tushdi...")
     await app.run_polling()
 
-if __name__ == '__main__':
-    import asyncio
+if name == '__main__':
     asyncio.run(start_bot())
