@@ -219,15 +219,36 @@ def approve_payment(update: Update, context: CallbackContext):
     if not payment:
         update.message.reply_text("❌ To'lov topilmadi!")
         return
-        if action == 'approve':
+       def approve_payment(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        update.message.reply_text("⚠️ Bu buyruq faqat adminlar uchun!")
+        return
+
+    args = context.args
+    if len(args) < 2:
+        update.message.reply_text("⚠️ To'g'ri format: /approvepayment <payment_id> <approve/reject>")
+        return
+
+    payment_id = args[0]
+    action = args[1].lower()
+
+    if action not in ['approve', 'reject']:
+        update.message.reply_text("⚠️ Tasdiqlash uchun 'approve' yoki 'reject' so'zlarini yozing.")
+        return
+
+    payment = db.get_payment(payment_id)
+    if not payment:
+        update.message.reply_text("❌ To'lov topilmadi!")
+        return
+
+    if action == 'approve':
         db.update_payment_status(payment_id, 'confirmed')
         db.update_balance(payment['user_id'], payment['amount'])
         update.message.reply_text(f"✅ To'lov {payment_id} tasdiqlandi va foydalanuvchi balansiga qo'shildi.")
     else:
         db.update_payment_status(payment_id, 'rejected')
         update.message.reply_text(f"❌ To'lov {payment_id} rad etildi.")
-
-
 # --- 7. Payment pagination callback ---
 def handle_payment_pagination(update: Update, context: CallbackContext):
     query = update.callback_query
