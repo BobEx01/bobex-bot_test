@@ -15,3 +15,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+from config import BOT_TOKEN, CARD_NUMBER, CARD_OWNER
+
+print(f"Karta raqami: {CARD_NUMBER}")
+print(f"Karta egasi: {CARD_OWNER}")
