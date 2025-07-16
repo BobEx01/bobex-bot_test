@@ -24,6 +24,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     text = update.message.text
+    chat_id = update.message.chat_id
+    text = update.message.text
     state = user_state.get(chat_id)
 
     if text == "📦 Yuk joylash":
