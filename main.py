@@ -112,7 +112,7 @@ async def origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def destination(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['destination'] = update.message.text
-    await update.message.
+    await update.message.reply_text("Matn")
     reply_text("Yuk haqida batafsil yozing:")
     return DETAILS
 
