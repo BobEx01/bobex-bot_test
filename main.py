@@ -15,28 +15,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# /start komandasi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    await update.message.reply_text(f"Assalomu alaykum, {user.first_name}! Bobex botiga xush kelibsiz.")
+    await update.message.reply_text(
+        f"Assalomu alaykum, {user.first_name}! BobExBirjaBot ishga tushdi."
+    )
 
+# /help komandasi
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text = (
-        "Bobex botining komandalar ro'yxati:\n"
+        "BobExBirjaBot komandalar ro'yxati:\n"
         "/start - Botni ishga tushirish\n"
         "/help - Yordam\n"
         "Siz menga xabar yozing, men javob beraman."
     )
     await update.message.reply_text(help_text)
 
+# Oddiy matnli xabarlarga javob (echo)
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text
     await update.message.reply_text(f"Siz yozdingiz: {text}")
 
+# Xatoliklarni loglash
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(msg="Exception raised:", exc_info=context.error)
 
 def main():
-    TOKEN = "7816762544:AAHr5nHRBjZCwMelQfr0IbHkSy8SxSkt9Po"
+    TOKEN = "7653469544:AAFH4xoRxu8-_nWy0CR1gXA1Nkv1txt3gqc"
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -45,7 +51,6 @@ def main():
 
     app.add_error_handler(error_handler)
 
-    # run_polling ni sinxron usulda chaqirish
     app.run_polling()
 
 if __name__ == "__main__":
