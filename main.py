@@ -1,166 +1,99 @@
-import os
-import sqlite3
 import logging
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    ContextTypes, filters, ConversationHandler
-)
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
-# Logger sozlash
+TOKEN = "7653469544:AAFH4xoRxu8-_nWy0CR1gXA1Nkv1txt3gqc"
+
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-logger = logging.getLogger(__name__)
 
-# Conversation states
-AD_TYPE, ORIGIN, DESTINATION, DETAILS, PRICE = range(5)
+# Holatlar (states)
+YUK_QOSHISH, SHOFR_QOSHISH = range(2)
 
-# SQLite yordamida e’lonlar saqlash
-DB_PATH = "bobex_ads.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS ads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            ad_type TEXT,
-            origin TEXT,
-            destination TEXT,
-            details TEXT,
-            price TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def save_ad(user_id, data):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO ads(user_id, ad_type, origin, destination, details, price)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (user_id, data['ad_type'], data['origin'], data['destination'], data['details'], data['price']))
-    conn.commit()
-    conn.close()
-
-def get_ads_by_user(user_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT id, ad_type, origin, destination, details, price FROM ads WHERE user_id = ?", (user_id,))
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-# Bot komandalar, handlerlar
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [["📝 E’lon joylashtirish", "📄 Mening e’lonlarim"], ["🔍 E’lonlarni ko‘rish", "/help"]]
+    reply_keyboard = [['🚛 Yuk qo‘shish', '🚚 Shofyor elon qo‘shish'],
+                      ['📦 Yuklarni ko‘rish', '👷 Shofyorlarni ko‘rish'],
+                      ['ℹ️ Yordam']]
     await update.message.reply_text(
-        "Assalomu alaykum! BobEx logistika botiga xush kelibsiz.",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        "BobEx Birja Botiga xush kelibsiz! Kerakli bo‘limni tanlang:",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
     )
 
+# YUK QO‘SHISH
+async def yuk_qoshish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Yuk eloningizni matn ko‘rinishida yozing:", reply_markup=ReplyKeyboardRemove())
+    return YUK_QOSHISH
+
+async def save_yuk(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    yuk_info = update.message.text
+    context.user_data['yuk'] = yuk_info
+    await update.message.reply_text("Yuk eloningiz saqlandi.")
+    return ConversationHandler.END
+
+# SHOFR QO‘SHISH
+async def shofr_qoshish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Shofyor eloningizni matn ko‘rinishida yozing:", reply_markup=ReplyKeyboardRemove())
+    return SHOFR_QOSHISH
+
+async def save_shofr(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    shofr_info = update.message.text
+    context.user_data['shofr'] = shofr_info
+    await update.message.reply_text("Shofyor eloningiz saqlandi.")
+    return ConversationHandler.END
+
+# YUKLARNI KO‘RISH
+async def yuklarni_korish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    yuk = context.user_data.get('yuk', 'Yuklar hali qo‘shilmagan.')
+    await update.message.reply_text(f"Yuklar: {yuk}")
+
+# SHOFRLARNI KO‘RISH
+async def shofrlarni_korish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    shofr = context.user_data.get('shofr', 'Shofyorlar hali qo‘shilmagan.')
+    await update.message.reply_text(f"Shofyorlar: {shofr}")
+
+# YORDAM
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "/start – Asosiy menyu\n"
-        "/help – Yordam\n"
-        "/cancel – E’lon berishni bekor qilish\n"
-        "/myads – Mening e’lonlarim\n"
-        "Yoki menyudan tugmani tanlang."
-    )
+    await update.message.reply_text("Yordam uchun admin bilan bog‘laning.")
 
+# RAQAM YOZISHNI BLOKLASH
+async def block_numbers(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if any(char.isdigit() for char in text):
+        await update.message.reply_text("Raqam yozish mumkin emas!")
+    else:
+        await update.message.reply_text("Xabaringiz qabul qilindi.")
+
+# BEKOR QILISH
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("E’lon berish bekor qilindi.")
+    await update.message.reply_text("Bekor qilindi.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
-
-async def myads(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    ads = get_ads_by_user(user_id)
-    if not ads:
-        await update.message.reply_text("Siz hali hech qanday e’lon bermagansiz.")
-    else:
-        text = "\n\n".join([f"➡️ ID:{r[0]}\nTuri: {r[1]}\n{r[2]} → {r[3]}\nNarx: {r[5]}\nTavsif: {r[4]}" for r in ads])
-        await update.message.reply_text(text)
-
-async def main_menu_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = update.message.text
-    if txt == "📝 E’lon joylashtirish":
-        await update.message.reply_text("Yuk turini kiriting (masalan: Avtomobil / Kuryer):")
-        return AD_TYPE
-    elif txt == "📄 Mening e’lonlarim":
-        await myads(update, context)
-        return ConversationHandler.END
-    elif txt == "🔍 E’lonlarni ko‘rish":
-        await update.message.reply_text("Barcha e’lonlar hozircha mavjud emas.")
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("Iltimos, menyudan tanlang.")
-        return ConversationHandler.END
-
-async def ad_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['ad_type'] = update.message.text
-    await update.message.reply_text("Jo‘natish manzilini kiriting:")
-    return ORIGIN
-
-async def origin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['origin'] = update.message.text
-    await update.message.reply_text("Manzilga yetkazish manzilini kiriting:")
-    return DESTINATION
-
-async def destination(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['destination'] = update.message.text
-    await update.message.reply_text("Matn")
-    reply_text("Yuk haqida batafsil yozing:")
-    return DETAILS
-
-async def details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['details'] = update.message.text
-    await update.message.reply_text("Narxni kiriting:")
-    return PRICE
-
-async def price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['price'] = update.message.text
-    data = context.user_data
-    save_ad(update.effective_user.id, data)
-    await update.message.reply_text(
-        f"E’lon qabul qilindi:\n\nTuri: {data['ad_type']}\n{data['origin']} → {data['destination']}\nNarx: {data['price']}\nTavsif: {data['details']}"
-    )
-    return ConversationHandler.END
-
-async def error_handler(update, context):
-    logger.error("Xato:", exc_info=context.error)
 
 def main():
-    init_db()
-    TOKEN = os.getenv("BOT_TOKEN")
-    if not TOKEN:
-        logger.error("TOKEN topilmadi. BOT_TOKEN o'zgaruvchisini sozlang.")
-        exit(1)
+    app = Application.builder().token(TOKEN).build()
 
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^(📝 E’lon joylashtirish|📄 Mening e’lonlarim|🔍 E’lonlarni ko‘rish)$"), main_menu_text)],
+    conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex('🚛 Yuk qo‘shish'), yuk_qoshish),
+            MessageHandler(filters.Regex('🚚 Shofyor elon qo‘shish'), shofr_qoshish)
+        ],
         states={
-            AD_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ad_type)],
-            ORIGIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, origin)],
-            DESTINATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, destination)],
-            DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, details)],
-            PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, price)],
+            YUK_QOSHISH: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_yuk)],
+            SHOFR_QOSHISH: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_shofr)],
         },
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler('cancel', cancel)]
     )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("myads", myads))
-    app.add_handler(conv)
-    app.add_error_handler(error_handler)
+    app.add_handler(MessageHandler(filters.Regex('📦 Yuklarni ko‘rish'), yuklarni_korish))
+    app.add_handler(MessageHandler(filters.Regex('👷 Shofyorlarni ko‘rish'), shofrlarni_korish))
+    app.add_handler(conv_handler)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, block_numbers))
 
     app.run_polling()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
