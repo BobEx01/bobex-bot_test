@@ -7,7 +7,6 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-import asyncio
 
 # Logger sozlash
 logging.basicConfig(
@@ -16,14 +15,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# /start komandasi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    await update.message.reply_text(
-        f"Assalomu alaykum, {user.first_name}! Bobex botiga xush kelibsiz."
-    )
+    await update.message.reply_text(f"Assalomu alaykum, {user.first_name}! Bobex botiga xush kelibsiz.")
 
-# /help komandasi
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     help_text = (
         "Bobex botining komandalar ro'yxati:\n"
@@ -33,16 +28,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
     await update.message.reply_text(help_text)
 
-# Oddiy matnli xabarlarga javob (echo)
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text
     await update.message.reply_text(f"Siz yozdingiz: {text}")
 
-# Xatoliklarni qayd etish
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error(msg="Exception raised:", exc_info=context.error)
 
-async def main():
+def main():
     TOKEN = "7816762544:AAHr5nHRBjZCwMelQfr0IbHkSy8SxSkt9Po"
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -52,7 +45,8 @@ async def main():
 
     app.add_error_handler(error_handler)
 
-    await app.run_polling()
+    # run_polling ni sinxron usulda chaqirish
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
