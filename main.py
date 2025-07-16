@@ -1,107 +1,147 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ConversationHandler,
+    ContextTypes
+)
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+logger = logging.getLogger(__name__)
 
 TOKEN = "7653469544:AAFH4xoRxu8-_nWy0CR1gXA1Nkv1txt3gqc"
 
-user_state = {}
-user_data = {}
+SELECT_ACTION, SELECT_REGION, SELECT_DISTRICT, ENTER_CARGO_DETAILS = range(4)
 
-viloyatlar = {
-    "Toshkent": ["Chilonzor", "Yunusobod", "Mirzo Ulug‘bek"],
-    "Farg‘ona": ["Marg‘ilon", "Qo‘qon", "Farg‘ona shahri"],
-    "Samarqand": ["Samarqand shahri", "Urgut", "Pastdarg‘om"]
+REGIONS = {
+    "Toshkent": ["Olmazor", "Chilonzor", "Yunusobod"],
+    "Samarqand": ["Samarqand shahar", "Urgut", "Narpay"],
+    "Andijon": ["Andijon shahar", "Asaka", "Marhamat"]
 }
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+cargo_db = []
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = [
-        ["📦 Yuk joylash", "📋 Yuklarni ko‘rish"],
-        ["💳 Hisob raqamlar", "📞 Aloqa"]
+        [KeyboardButton("📦 Yangi Yuk qo'shish")],
+        [KeyboardButton("🔍 Yuklar ro'yxati")],
+        [KeyboardButton("⚙️ Hisob raqamlarim")],
+        [KeyboardButton("ℹ️ Yordam")]
     ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
     await update.message.reply_text(
-        "Assalomu alaykum! BobEx yuk birjasi botiga xush kelibsiz.",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        "Assalomu alaykum, BobEx Birja botiga xush kelibsiz!\nKerakli bo‘limni tanlang:",
+        reply_markup=reply_markup
     )
-    user_state[update.message.chat_id] = None
-    async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    text = update.message.text
-    chat_id = update.message.chat_id
-    text = update.message.text
-    state = user_state.get(chat_id)
+    return SELECT_ACTION
 
-    if text == "📦 Yuk joylash":
-        keyboard = [[v] for v in viloyatlar] + [["⬅️ Ortga"]]
-        await update.message.reply_text("Viloyatni tanlang:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        user_state[chat_id] = "select_viloyat"
+async def add_cargo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    buttons = [[InlineKeyboardButton(region, callback_data=f"region_{region}")] for region in REGIONS]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text("Yuk uchun viloyatni tanlang:", reply_markup=reply_markup)
+    return SELECT_REGION
 
-    elif state == "select_viloyat" and text in viloyatlar:
-        user_data[chat_id] = {"viloyat": text}
-        tumanlar = viloyatlar[text]
-        keyboard = [[t] for t in tumanlar] + [["⬅️ Ortga"]]
-        await update.message.reply_text("Tuman tanlang:", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-        user_state[chat_id] = "select_tuman"
+async def region_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    region = query.data.split('_')[1]
+    context.user_data['region'] = region
 
-    elif state == "select_tuman" and any(text in t for t in viloyatlar.values()):
-        user_data[chat_id]["tuman"] = text
-        await update.message.reply_text("Yuk nomini yozing:")
-        user_state[chat_id] = "enter_yuk_nom"
+    districts = REGIONS[region]
+    buttons = [[InlineKeyboardButton(d, callback_data=f"district_{d}")] for d in districts]
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await query.edit_message_text(
+        f"{region} viloyati tanlandi. Endi tumanni tanlang:",
+        reply_markup=reply_markup
+    )
+    return SELECT_DISTRICT
 
-    elif state == "enter_yuk_nom":
-        user_data[chat_id]["yuk_nom"] = text
-        await update.message.reply_text("Yuk og‘irligini kiriting (tonna):")
-        user_state[chat_id] = "enter_ogirlik"
+async def district_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    district = query.data.split('_')[1]
+    context.user_data['district'] = district
 
-    elif state == "enter_ogirlik":
-        user_data[chat_id]["ogirlik"] = text
-        await update.message.reply_text("Yuk narxini kiriting (UZS):")
-        user_state[chat_id] = "enter_narx"
+    await query.edit_message_text(
+        f"Manzil: {context.user_data['region']}, {district}\n\n"
+        "Endi yuk tafsilotlarini kiriting (turi, og'irligi, qo'shimcha ma'lumot):"
+    )
+    return ENTER_CARGO_DETAILS
 
-    elif state == "enter_narx":
-        user_data[chat_id]["narx"] = text
-        await update.message.reply_text("Qo‘shimcha ma'lumot kiriting:")
-        user_state[chat_id] = "enter_desc"
+async def cargo_details(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    details = update.message.text
+    cargo_db.append({
+        "user_id": update.message.from_user.id,
+        "region": context.user_data['region'],
+        "district": context.user_data['district'],
+        "details": details
+    })
 
-    elif state == "enter_desc":
-        user_data[chat_id]["desc"] = text
-        data = user_data[chat_id]
-        await update.message.reply_text(
-            f"✅ Yuk joylandi:\n"
-            f"📍 {data['viloyat']} - {data['tuman']}\n"
-            f"📦 {data['yuk_nom']}\n"
-            f"⚖️ {data['ogirlik']} tonna\n"
-            f"💰 {data['narx']} UZS\n"
-            f"🗒 {data['desc']}"
+    await update.message.reply_text(
+        "✅ Yuk muvaffaqiyatli qo‘shildi!\nBosh menyuga qaytish uchun /start buyrug‘ini bosing."
+    )
+    return ConversationHandler.END
+
+async def show_cargo_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not cargo_db:
+        await update.message.reply_text("📭 Hozircha yuklar mavjud emas.")
+        return
+    text = "📦 Yuklar ro‘yxati:\n\n"
+    for idx, cargo in enumerate(cargo_db, 1):
+        text += (
+            f"{idx}) Viloyat: {cargo['region']}\n"
+            f"Tuman: {cargo['district']}\n"
+            f"Tafsilot: {cargo['details']}\n\n"
         )
-        user_state[chat_id] = None
+    await update.message.reply_text(text)
 
-    elif text == "📋 Yuklarni ko‘rish":
-        await update.message.reply_text("Hozircha yuklar ro‘yxati mavjud emas. Tez orada chiqamiz!")
+async def hisob_raqamlar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "💳 Hisob raqamlaringiz:\n"
+        "1. Uzcard: 8600 xxxx xxxx xxxx\n"
+        "2. Humo: 9860 xxxx xxxx xxxx\n"
+        "3. Payme, Click ham mavjud."
+    )
 
-    elif text == "💳 Hisob raqamlar":
-        await update.message.reply_text(
-            "💳 To‘lov uchun hisob raqamlar:\n\n"
-            "🏦 Uzcard: 5614 6822 1820 6250\n"
-            "🏦 Click: +998 90 123 45 67\n"
-            "🏦 Payme: +998 90 123 45 67\n"
-            "🏦 Bank rekvizitlari:\n"
-            "    Nomi: Bobex Logistics LLC\n"
-            "    INN: 305123456\n"
-            "    Hisob raqam: 20208000300123456789\n"
-            "    Bank: Xalq Banki, Toshkent filiali\n\n"
-            "⬅️ Ortga qaytish uchun '⬅️ Ortga' tugmasini bosing."
-        )
+async def yordam(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🆘 Yordam uchun: @AdminUser\n"
+        "Qo‘shimcha ma’lumot va yordam uchun admin bilan bog‘laning."
+    )
 
-    elif text == "📞 Aloqa":
-        await update.message.reply_text("Bog‘lanish uchun: +998 90 123 45 67")
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("❌ Amal bekor qilindi. Bosh menyuga qaytish uchun /start bosing.")
+    return ConversationHandler.END
 
-    elif text == "⬅️ Ortga":
-        await start(update, context)
+def main():
+    application = Application.builder().token(TOKEN).build()
 
-    else:
-        await update.message.reply_text("Iltimos menyudan birini tanlang yoki /start ni bosing.")
-        def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT, message_handler))
-    app.run_polling()
-    if __name__ == "__main__":
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^📦 Yangi Yuk qo'shish$"), add_cargo)],
+        states={
+            SELECT_REGION: [CallbackQueryHandler(region_selected, pattern="^region_")],
+            SELECT_DISTRICT: [CallbackQueryHandler(district_selected, pattern="^district_")],
+            ENTER_CARGO_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, cargo_details)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.Regex("^🔍 Yuklar ro'yxati$"), show_cargo_list))
+    application.add_handler(MessageHandler(filters.Regex("^⚙️ Hisob raqamlarim$"), hisob_raqamlar))
+    application.add_handler(MessageHandler(filters.Regex("^ℹ️ Yordam$"), yordam))
+    application.add_handler(conv_handler)
+
+    application.run_polling()
+
+if __name__ == '__main__':
     main()
